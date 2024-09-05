@@ -1,10 +1,7 @@
 
 classdef ImaqCam < mic.Base
         
-    properties (Constant)
-        
-        cName = 'imaq-cam';
-    end
+
     
     properties
         
@@ -49,15 +46,20 @@ classdef ImaqCam < mic.Base
         end
 
         function disconnect(this)
-            stop(this.hCameraHandle);
-            if isempty(this.hCameraHandle)
-                return
+            try
+                stop(this.hCameraHandle);
+                if isempty(this.hCameraHandle)
+                    return
+                end
+                delete(this.hCameraHandle);
+                this.hCameraHandle = [];
+            catch mE
+                this.msg(mE.message);
             end
-            delete(this.hCameraHandle);
-            this.hCameraHandle = [];
         end
 
         function lVal = isConnected(this)
+
             lVal = ~isempty(this.hCameraHandle);
 
             % Additionally check if the camera is still available, if not then disconnect
@@ -67,6 +69,7 @@ classdef ImaqCam < mic.Base
                     this.disconnect();
                     lVal = false;
                     msgbox(sprintf('Camera %s is no longer available', this.cCameraName));
+                end
             end
         end
 
@@ -76,6 +79,13 @@ classdef ImaqCam < mic.Base
         end
 
         function dID = getCameraDeviceID(this)
+            % temporarily disable
+            dID = -1;
+            return;
+            if exist('imaqinfo') == 0
+                dID = -1;
+                return
+            end
             stCamList = imaqhwinfo(this.cProtocol);
 
             % Loop through and check if the camera is available
