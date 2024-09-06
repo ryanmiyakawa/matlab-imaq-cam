@@ -19,6 +19,11 @@ classdef ImaqCam < mic.Base
         % {double 1x1} timeout
         hCameraHandle = []
 
+        hImageHandle = []
+        dROI = [] % ROI position (in pixels) [x, y, width, height]
+        
+        lImaqAvail = false
+
     end
     
     methods
@@ -34,6 +39,10 @@ classdef ImaqCam < mic.Base
                 end
             end
             
+            if this.isImaqAvail()
+                this.lImaqAvail = true;
+            end
+            
         end
 
         function connect(this)
@@ -42,17 +51,64 @@ classdef ImaqCam < mic.Base
                 error('Camera not found');
             end
             this.hCameraHandle = videoinput(this.cProtocol, dID, this.cFrameFormat);
+            if ~isempty(this.dROI)
+                this.hCameraHandle.ROIPosition = this.dROI;
+            end
             start(this.hCameraHandle)
         end
 
+        function preview(this, hAxes)  
+            vidRes = this.getResolution();
+            nBands = this.getNumberOfBands(); 
+
+            if ~isempty(this.dROI)
+                vidRes = this.dROI([4 3]);
+            end
+            this.hImageHandle = image(zeros(vidRes(2), vidRes(1), nBands), 'Parent', hAxes);
+            preview(this.hCameraHandle, this.hImageHandle);
+        end
+        
+        function stopPreview(this)
+            stoppreview(this.hCameraHandle);
+        end
+
+        function dRes = getResolution(this)
+            if ~this.isConnected()
+                error('Camera not connected');
+            end
+            dRes = this.hCameraHandle.VideoResolution;
+        end
+
+        function dNBands = getNumberOfBands(this)
+            if ~this.isConnected()
+                error('Camera not connected');
+            end
+            dNBands = this.hCameraHandle.NumberOfBands;
+        end
+
+        
         function disconnect(this)
             try
-                stop(this.hCameraHandle);
-                if isempty(this.hCameraHandle)
-                    return
+                % Stop the acquisition if it is still running
+                if isvalid(this.hCameraHandle) && islogging(this.hCameraHandle)
+                    stop(this.hCameraHandle);
                 end
-                delete(this.hCameraHandle);
+                
+                % Clear any buffered data from the camera
+                if isvalid(this.hCameraHandle)
+                    flushdata(this.hCameraHandle);
+                end
+                
+                % Delete the camera object if it's valid
+                if isvalid(this.hCameraHandle)
+                    delete(this.hCameraHandle);
+                end
+                
+                % Set the handle to empty
                 this.hCameraHandle = [];
+
+                imaqreset;
+                
             catch mE
                 this.msg(mE.message);
             end
@@ -74,18 +130,38 @@ classdef ImaqCam < mic.Base
         end
 
         function lVal = isAvailable(this)
+            if ~this.lImaqAvail()
+                lVal = false;
+                return;
+            end
+            
             dID = this.getCameraDeviceID();
             lVal = dID > -1;
         end
+        
+        function lVal = isImaqAvail(this)
+            % Get the list of installed toolboxes
+            toolboxes = ver;
+            
+            % Initialize a flag to check if the toolbox is found
+            lVal = false;
+            
+            % Loop through the list of toolboxes and check for 'Image Acquisition Toolbox'
+            for i = 1:length(toolboxes)
+                if strcmp(toolboxes(i).Name, 'Image Acquisition Toolbox')
+                    lVal = true;
+                    break;
+                end
+            end
+        end
 
         function dID = getCameraDeviceID(this)
-            % temporarily disable
-            dID = -1;
-            return;
-            if exist('imaqinfo') == 0
+            if ~this.lImaqAvail()
                 dID = -1;
-                return
+                return;
             end
+
+
             stCamList = imaqhwinfo(this.cProtocol);
 
             % Loop through and check if the camera is available
@@ -96,7 +172,7 @@ classdef ImaqCam < mic.Base
 
             for k = 1:length(stCamList.DeviceInfo)
                 if strcmp(stCamList.DeviceInfo(k).DeviceName, this.cCameraName)
-                    dID = stCamList.DeviceIDs(k);
+                    dID = stCamList.DeviceIDs{k};
                     return
                 end
             end
@@ -106,7 +182,7 @@ classdef ImaqCam < mic.Base
 
         function dData = acquire(this, nFrames)
             dData = double(getdata(this.hCameraHandle, nFrames));
-            dData = mean(dData, 4);
+            dData = sum(dData, 4);
             dData = mean(dData, 3);
             dData = dData / 255;
         end
