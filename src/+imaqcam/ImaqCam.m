@@ -23,6 +23,7 @@ classdef ImaqCam < mic.Base
         dROI = [] % ROI position (in pixels) [x, y, width, height]
         
         lImaqAvail = false
+        lIsPreviewing = false
 
     end
     
@@ -58,6 +59,13 @@ classdef ImaqCam < mic.Base
         end
 
         function preview(this, hAxes)  
+            if (this.lIsPreviewing)
+                return;
+            end
+            if ~this.isConnected()
+                error('Camera not connected');
+            end
+            
             vidRes = this.getResolution();
             nBands = this.getNumberOfBands(); 
 
@@ -66,10 +74,16 @@ classdef ImaqCam < mic.Base
             end
             this.hImageHandle = image(zeros(vidRes(2), vidRes(1), nBands), 'Parent', hAxes);
             preview(this.hCameraHandle, this.hImageHandle);
+            this.lIsPreviewing = true;
         end
         
         function stopPreview(this)
             stoppreview(this.hCameraHandle);
+            this.lIsPreviewing = false;
+        end
+
+        function lVal = isPreviewing(this)
+            lVal = this.lIsPreviewing;
         end
 
         function dRes = getResolution(this)
@@ -89,6 +103,11 @@ classdef ImaqCam < mic.Base
         
         function disconnect(this)
             try
+                % Stop the preview if it is running
+                if this.lIsPreviewing
+                    this.stopPreview();
+                end
+
                 % Stop the acquisition if it is still running
                 if isvalid(this.hCameraHandle) && islogging(this.hCameraHandle)
                     stop(this.hCameraHandle);
@@ -126,6 +145,14 @@ classdef ImaqCam < mic.Base
                     lVal = false;
                     msgbox(sprintf('Camera %s is no longer available', this.cCameraName));
                 end
+            end
+        end
+
+        function refreshIMAQ(this)
+            if (this.lImaqAvail)
+                imaqreset;
+            else
+                msgbox('Image Acquisition Toolbox is not available');
             end
         end
 
@@ -181,6 +208,15 @@ classdef ImaqCam < mic.Base
         end
 
         function dData = acquire(this, nFrames)
+
+            if this.lIsPreviewing
+                this.stopPreview();
+            end
+
+            if nargin == 1
+                nFrames = 1;
+            end
+
             dData = double(getdata(this.hCameraHandle, nFrames));
             dData = sum(dData, 4);
             dData = mean(dData, 3);
