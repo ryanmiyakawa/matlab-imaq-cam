@@ -18,6 +18,7 @@ classdef ImaqCam < mic.Base
         
         % {double 1x1} timeout
         hCameraHandle = []
+        hSrcHandle = []
 
         hImageHandle = []
         dROI = [] % ROI position (in pixels) [x, y, width, height]
@@ -55,7 +56,12 @@ classdef ImaqCam < mic.Base
             if ~isempty(this.dROI)
                 this.hCameraHandle.ROIPosition = this.dROI;
             end
+            
+            this.hCameraHandle.FramesPerTrigger = 1;
+
+            
             start(this.hCameraHandle)
+            this.hSrcHandle = getselectedsource(this.hCameraHandle);
         end
 
         function preview(this, hAxes)  
@@ -70,9 +76,10 @@ classdef ImaqCam < mic.Base
             nBands = this.getNumberOfBands(); 
 
             if ~isempty(this.dROI)
-                vidRes = this.dROI([4 3]);
+                vidRes = this.dROI([3 4]);
             end
             this.hImageHandle = image(zeros(vidRes(2), vidRes(1), nBands), 'Parent', hAxes);
+            this.hCameraHandle.ROIPosition = this.dROI;
             preview(this.hCameraHandle, this.hImageHandle);
             this.lIsPreviewing = true;
         end
@@ -216,8 +223,10 @@ classdef ImaqCam < mic.Base
             if nargin == 1
                 nFrames = 1;
             end
+            
+            dData = double(getsnapshot(this.hCameraHandle));
 
-            dData = double(getdata(this.hCameraHandle, nFrames));
+%             dData = double(getdata(this.hCameraHandle));
             dData = sum(dData, 4);
             dData = mean(dData, 3);
             dData = dData / 255;
